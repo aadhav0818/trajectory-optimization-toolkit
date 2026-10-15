@@ -20,40 +20,61 @@
 % [x_min, f_min, n_calls] = polyLineSearch(f, x, s, t, eps)
 % ====================================================================================
 
-function [x_min, f_min, calls] = fletcherReeves(f, x, t, eps)
-    tol = eps;
+function [x_min, f_min, calls, X_hist, success] = fletcherReeves(f, x, t, eps)
     fpp_calls = 0;
     fp_calls = 0;
     f_calls = 0;
+
+    maxit = 1000;
+    X_hist = x;
+    success = false;
+
     s = zeros(length(x), 1);
-    beta = 0;
     d_prev = zeros(length(x), 1);
-    while tol >= eps
-        [f_grad, f_CX_calls] = CXStepGradient(f, x, 1e-50);
+
+    for ii = 1:maxit
+        [f_grad, f_CX_calls] = CXStepGradient(f, x, 1e-50, 'col');
         fp_calls = fp_calls + 1;
         f_calls = f_calls + f_CX_calls;
 
-        d = -f_grad';
-
-        if norm(d_prev) ~= 0
-            beta = (d'*d)/(d_prev'*d_prev);
-        end
-        s = d + beta*s;
-        d_prev = d;
-        
         tol = norm(f_grad);
-        if(tol < eps)
-            x_min = x;
-            f_min = f(x);
-            f_calls = f_calls + 1;
+
+        if tol < eps
+            success = true;
             break;
         end
-        
-        [x_min, f_min, f_lineCalls] = polyLineSearch(f, x, s, t, eps);
-        x = x_min;
-        
+
+        d = -f_grad;
+
+        if ii == 1
+            beta = 0;
+        else
+            beta = (d'*d)/(d_prev'*d_prev);
+        end
+
+        s = d + beta*s;
+
+        if s'*f_grad >= 0
+            s = d;
+        end
+
+        d_prev = d;
+
+        [x_min, f_min, f_lineCalls] = polyLineSearch(f, x, s/norm(s), t, eps, 1);
+
         f_calls = f_calls + f_lineCalls;
+
+        if norm(x_min-x) < 1e-14
+            break;
+        end
+
+        x = x_min;
+        X_hist = [X_hist, x];
     end
-    
+
+    x_min = x;
+    f_min = f(x);
+    f_calls = f_calls + 1;
+
     calls = [f_calls fp_calls fpp_calls];
 end

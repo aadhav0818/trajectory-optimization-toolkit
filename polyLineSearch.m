@@ -5,59 +5,96 @@
 % x = location
 % eps = tolerance to stop refining
 
-function [x_min, f_min, n_calls] = polyLineSearch(f, x, s, t, eps)
+function [x_min, f_min, n_calls, X_calls] = polyLineSearch(f, x, s, t, eps, growth)
     n_calls = 0;
-    tol = eps;
+    X_calls = [];
+    maxit = 1000;
 
-    bracket_found = false;
-    bracket_step = 0;
-    f0 = f(x + bracket_step*t*s);
-    f1 = f(x + (bracket_step+1)*t*s);
-    f2 = f(x + (bracket_step+2)*t*s);
-    n_calls = n_calls + 3;
+    f0 = f(x);
+    f1 = f(x + t*s);
+    f2 = f(x + 2*t*s);
+    n_calls = 3;
+    X_calls = [x, x+t*s, x+2*t*s];
 
-    while ~bracket_found
-        if f1 < f2 && f1 < f0
-            bracket_found = true;
-        else
-            f0 = f1;
-            f1 = f2;
-            f2 = f(x + (bracket_step+3)*t*s);
-            n_calls = n_calls + 1;
-            bracket_step = bracket_step + 1;
+    for ii = 1:maxit
+        if f1 < f0
+            break;
+        end
+
+        t = t/2;
+        f1 = f(x + t*s);
+        f2 = f(x + 2*t*s);
+        n_calls = n_calls + 2;
+        X_calls = [X_calls, x+t*s, x+2*t*s];
+
+        if t < 1e-14
+            x_min = x;
+            f_min = f0;
+            return;
         end
     end
+
+    a0 = 0;
+    a1 = t;
+    a2 = 2*t;
+
+    step = t;
     
-    a0 = bracket_step * t;
-    a1 = (bracket_step+1) * t;
-    a2 = (bracket_step+2) * t;
+    for ii = 1:maxit
+        if f1 <= f0 && f1 <= f2
+            break;
+        end
+    
+        a0 = a1;
+        f0 = f1;
+    
+        a1 = a2;
+        f1 = f2;
+    
+        step = step*growth;
+        a2 = a1 + step;
+    
+        f2 = f(x + a2*s);
+        n_calls = n_calls + 1;
+        X_calls = [X_calls, x+a2*s];
+    end
 
-    while tol >= eps
-        numer = (f0*a1^2 - f0*a2^2 - f1*a0^2 + f1*a2^2 + f2*a0^2 - f2*a1^2);
-        denom =  (f0*a1 - f0*a2 - f1*a0 + f1*a2 + f2*a0 - f2*a1);
-
-        if ~isfinite(denom) || abs(denom) < 1e-12
-            break
+    for ii = 1:maxit
+        if abs(a2-a0) < eps
+            break;
         end
 
-        a_new = (1/2) * numer/denom;
-        
-        if ~isfinite(a_new) || a_new <= a0 || a_new >= a2
-            break
+        numer = f0*(a1^2-a2^2) + f1*(a2^2-a0^2) + f2*(a0^2-a1^2);
+        denom = f0*(a1-a2) + f1*(a2-a0) + f2*(a0-a1);
+
+        if ~isfinite(denom) || abs(denom) < 1e-14
+            a_new = (a0+a2)/2;
+        else
+            a_new = 0.5*numer/denom;
+        end
+
+        if ~isfinite(a_new) || a_new <= a0 || a_new >= a2 || ...
+                abs(a_new-a1) < 1e-12*(a2-a0)
+            if a1-a0 > a2-a1
+                a_new = (a0+a1)/2;
+            else
+                a_new = (a1+a2)/2;
+            end
         end
 
         f_new = f(x + a_new*s);
+        n_calls = n_calls + 1;
+        X_calls = [X_calls, x+a_new*s];
 
         if ~isfinite(f_new)
-            error('Function evaluation returned Inf or NaN.')
+            break;
         end
 
-        n_calls = n_calls + 1;
         if a_new < a1
             if f_new < f1
                 a2 = a1;
-                a1 = a_new;
                 f2 = f1;
+                a1 = a_new;
                 f1 = f_new;
             else
                 a0 = a_new;
@@ -74,12 +111,8 @@ function [x_min, f_min, n_calls] = polyLineSearch(f, x, s, t, eps)
                 f2 = f_new;
             end
         end
-
-        f_evals = [f0 f1 f2];
-        tol = (abs(max(f_evals) - min(f_evals)))/(max(1e-8, min(abs(f_evals))));
     end
 
     x_min = x + a1*s;
     f_min = f1;
-
 end
